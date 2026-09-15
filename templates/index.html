@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Validador de Certificados CETI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 50px; background: #f4f4f9; }
+        .container { max-width: 600px; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input[type="text"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Validador de Certificados</h2>
+        <form method="POST">
+            <label for="folio">Número de Folio:</label>
+            <input type="text" id="folio" name="folio" required>
+            <button type="submit">Validar</button>
+        </form>
+        {% if resultado is not None %}
+            <div class="result">
+                {% if resultado %}
+                    <h3>¡Certificado Válido!</h3>
+                    <p><strong>Nombre:</strong> {{ resultado.nombre }}</p>
+                    <p><strong>Curso:</strong> {{ resultado.curso }}</p>
+                    <p><strong>Fecha:</strong> {{ resultado.fecha }}</p>
+                {% else %}
+                    <h3 style="color: red;">Certificado no encontrado</h3>
+                    <p>El folio ingresado no existe en nuestros registros.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
