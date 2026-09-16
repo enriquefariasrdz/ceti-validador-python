@@ -122,18 +122,44 @@ def admin():
             finally:
                 connection.close()
 
+    search = (request.args.get('q') or '').strip()
+    status_filter = (request.args.get('status') or '').strip()
+    if status_filter not in ('', 'Valido', 'Revocado', 'Expirado'):
+        status_filter = ''
+
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute("""
+            conditions = []
+            params = []
+            if search:
+                like = f'%{search}%'
+                conditions.append('''(folio LIKE %s OR transcript LIKE %s OR certificate LIKE %s
+                    OR nombre LIKE %s OR curso LIKE %s OR document_type LIKE %s OR level LIKE %s)''')
+                params.extend([like] * 7)
+            if status_filter:
+                conditions.append('estatus = %s')
+                params.append(status_filter)
+
+            where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
+            cursor.execute(f"""
                 SELECT id, folio, transcript, certificate, document_type, nombre, curso, level, hours, fecha, estatus
-                FROM certificados ORDER BY id DESC
-            """)
+                FROM certificados{where}
+                ORDER BY id DESC
+            """, tuple(params))
             certificados = cursor.fetchall()
     finally:
         connection.close()
 
-    return render_template('admin.html', certificados=certificados, error=error, created=request.args.get('created') == '1', updated=request.args.get('updated') == '1')
+    return render_template(
+        'admin.html',
+        certificados=certificados,
+        error=error,
+        created=request.args.get('created') == '1',
+        updated=request.args.get('updated') == '1',
+        search=search,
+        status_filter=status_filter
+    )
 
 @app.route('/admin/edit/<int:certificate_id>', methods=['GET', 'POST'])
 def admin_edit(certificate_id):
