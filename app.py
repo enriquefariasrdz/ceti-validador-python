@@ -4,24 +4,49 @@ import os
 import secrets
 import json
 import urllib.request
+import time
+import threading
 
 app = Flask(__name__)
 
+_vault_token = None
+_vault_token_expires_at = 0
+_vault_token_lock = threading.Lock()
+
+def get_vault_token():
+    global _vault_token, _vault_token_expires_at
+
+    # Reuse the AppRole token while it is valid, with a 60-second safety margin.
+    if _vault_token and time.time() < _vault_token_expires_at - 60:
+        return _vault_token
+
+    with _vault_token_lock:
+        # Another request may have refreshed the token while we waited.
+        if _vault_token and time.time() < _vault_token_expires_at - 60:
+            return _vault_token
+
+        vault_addr = os.environ['VAULT_ADDR'].rstrip('/')
+        payload = json.dumps({
+            'role_id': os.environ['VAULT_ROLE_ID'],
+            'secret_id': os.environ['VAULT_SECRET_ID'],
+        }).encode()
+
+        login_request = urllib.request.Request(
+            vault_addr + '/v1/auth/approle/login',
+            data=payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        with urllib.request.urlopen(login_request, timeout=5) as response:
+            auth = json.load(response)['auth']
+
+        _vault_token = auth['client_token']
+        _vault_token_expires_at = time.time() + auth['lease_duration']
+        return _vault_token
+
 def get_vault_db_credentials():
     vault_addr = os.environ['VAULT_ADDR'].rstrip('/')
-    payload = json.dumps({
-        'role_id': os.environ['VAULT_ROLE_ID'],
-        'secret_id': os.environ['VAULT_SECRET_ID'],
-    }).encode()
-
-    login_request = urllib.request.Request(
-        vault_addr + '/v1/auth/approle/login',
-        data=payload,
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
-    with urllib.request.urlopen(login_request, timeout=5) as response:
-        token = json.load(response)['auth']['client_token']
+    token = get_vault_token()
 
     secret_request = urllib.request.Request(
         vault_addr + '/v1/secret/data/ceti-validador',
