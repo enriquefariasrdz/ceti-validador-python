@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 import pymysql
 import os
+import secrets
 
 app = Flask(__name__)
 
@@ -11,6 +12,25 @@ def get_db_connection():
         password=os.getenv('DB_PASSWORD', ''),
         database=os.getenv('DB_NAME', 'test'),
         cursorclass=pymysql.cursors.DictCursor
+    )
+
+def admin_credentials_valid(username, password):
+    admin_user = os.getenv('ADMIN_USER')
+    admin_password = os.getenv('ADMIN_PASSWORD')
+
+    if not admin_user or not admin_password or username is None or password is None:
+        return False
+
+    return (
+        secrets.compare_digest(username, admin_user)
+        and secrets.compare_digest(password, admin_password)
+    )
+
+def admin_auth_required():
+    return Response(
+        'Autenticación requerida',
+        401,
+        {'WWW-Authenticate': 'Basic realm="CETI Admin"'}
     )
 
 @app.route('/', methods=['GET', 'POST'])
@@ -35,7 +55,11 @@ def index():
 
 @app.route('/admin', methods=['GET'])
 def admin():
-    return 'CETI Admin - acceso administrativo en preparación', 200
+    auth = request.authorization
+    if not auth or not admin_credentials_valid(auth.username, auth.password):
+        return admin_auth_required()
+
+    return 'CETI Admin - acceso administrativo autorizado', 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
