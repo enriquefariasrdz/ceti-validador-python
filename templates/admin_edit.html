@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Editar certificado - CETI Admin</title>
+<style>body{font-family:Arial,sans-serif;margin:40px;background:#f4f4f9;color:#222}.container{max-width:900px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1)}.notice,.error{padding:12px 15px;margin-bottom:20px;border-radius:4px}.notice{background:#e9ecef}.error{background:#f8d7da;color:#842029}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.field{display:flex;flex-direction:column}.field label{font-weight:bold;margin-bottom:6px}.field input,.field select{padding:10px;border:1px solid #ccc;border-radius:4px}button,.back{display:inline-block;margin-top:20px;padding:11px 18px;border-radius:4px;text-decoration:none;border:0;cursor:pointer}.save{background:#007bff;color:#fff}.back{background:#e9ecef;color:#222;margin-left:8px}@media(max-width:700px){.grid{grid-template-columns:1fr}body{margin:15px}}</style></head>
+<body><div class="container"><h1>Editar certificado</h1><div class="notice">ID {{ certificado.id }}. Los cambios se reflejarán inmediatamente en el validador público. No existe opción de eliminación.</div>{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="POST"><div class="grid">
+<div class="field"><label>Folio *</label><input type="text" name="folio" required value="{{ certificado.folio }}"></div>
+<div class="field"><label>Tipo de documento</label><input type="text" name="document_type" value="{{ certificado.document_type or '' }}"></div>
+<div class="field"><label>Transcript</label><input type="text" name="transcript" value="{{ certificado.transcript or '' }}"></div>
+<div class="field"><label>Certificate</label><input type="text" name="certificate" value="{{ certificado.certificate or '' }}"></div>
+<div class="field"><label>Nombre *</label><input type="text" name="nombre" required value="{{ certificado.nombre }}"></div>
+<div class="field"><label>Programa *</label><input type="text" name="curso" required value="{{ certificado.curso }}"></div>
+<div class="field"><label>Nivel</label><input type="text" name="level" value="{{ certificado.level or '' }}"></div>
+<div class="field"><label>Horas</label><input type="number" name="hours" min="0" step="1" value="{{ certificado.hours if certificado.hours is not none else '' }}"></div>
+<div class="field"><label>Fecha de emisión *</label><input type="date" name="fecha" required value="{{ certificado.fecha }}"></div>
+<div class="field"><label>Estado *</label><select name="estatus" required><option value="Valido" {% if certificado.estatus=='Valido' %}selected{% endif %}>Válido</option><option value="Revocado" {% if certificado.estatus=='Revocado' %}selected{% endif %}>Revocado</option><option value="Expirado" {% if certificado.estatus=='Expirado' %}selected{% endif %}>Expirado</option></select></div>
+</div><button class="save" type="submit">Guardar cambios</button><a class="back" href="{{ url_for('admin') }}">Cancelar</a></form></div></body></html>
