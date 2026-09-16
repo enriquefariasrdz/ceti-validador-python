@@ -20,8 +20,15 @@ def index():
         folio = request.form.get('folio')
         connection = get_db_connection()
         with connection.cursor() as cursor:
-            query = "SELECT * FROM certificados WHERE folio = %s"
-            cursor.execute(query, (folio,))
+            query = """
+                SELECT *
+                FROM certificados
+                WHERE folio = %s
+                   OR transcript = %s
+                   OR certificate = %s
+                LIMIT 1
+            """
+            cursor.execute(query, (folio, folio, folio))
             resultado = cursor.fetchone()
         connection.close()
     return render_template('index.html', resultado=resultado)
