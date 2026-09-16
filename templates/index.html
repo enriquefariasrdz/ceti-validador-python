@@ -10,6 +10,9 @@
         button { background: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: #0056b3; }
         .result { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 4px; }
+        .valid { color: #198754; }
+        .warning { color: #b26a00; }
+        .invalid { color: #dc3545; }
     </style>
 </head>
 <body>
@@ -23,12 +26,20 @@
         {% if resultado != none %}
             <div class="result">
                 {% if resultado %}
-                    <h3>¡Certificado Válido!</h3>
+                    {% if resultado.estatus == 'Valido' %}
+                        <h3 class="valid">¡Certificado Válido!</h3>
+                    {% elif resultado.estatus == 'Revocado' %}
+                        <h3 class="invalid">Certificado Revocado</h3>
+                    {% elif resultado.estatus == 'Expirado' %}
+                        <h3 class="warning">Certificado Expirado</h3>
+                    {% else %}
+                        <h3 class="warning">Estado del certificado: {{ resultado.estatus }}</h3>
+                    {% endif %}
                     <p><strong>Nombre:</strong> {{ resultado.nombre }}</p>
                     <p><strong>Curso:</strong> {{ resultado.curso }}</p>
                     <p><strong>Fecha:</strong> {{ resultado.fecha }}</p>
                 {% else %}
-                    <h3 style="color: red;">Certificado no encontrado</h3>
+                    <h3 class="invalid">Certificado no encontrado</h3>
                     <p>El folio ingresado no existe en nuestros registros.</p>
                 {% endif %}
             </div>
