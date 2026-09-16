@@ -59,7 +59,20 @@ def admin():
     if not auth or not admin_credentials_valid(auth.username, auth.password):
         return admin_auth_required()
 
-    return 'CETI Admin - acceso administrativo autorizado', 200
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, folio, transcript, certificate, document_type,
+                       nombre, curso, level, hours, fecha, estatus
+                FROM certificados
+                ORDER BY id DESC
+            """)
+            certificados = cursor.fetchall()
+    finally:
+        connection.close()
+
+    return render_template('admin.html', certificados=certificados)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
