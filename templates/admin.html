@@ -1,136 +1,33 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CETI Admin - Certificados</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #222; }
-        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { margin-top: 0; }
-        h2 { margin-top: 30px; }
-        .notice, .success, .error { padding: 12px 15px; margin-bottom: 20px; border-radius: 4px; }
-        .notice { background: #e9ecef; }
-        .success { background: #d1e7dd; color: #0f5132; }
-        .error { background: #f8d7da; color: #842029; }
-        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-        .field { display: flex; flex-direction: column; }
-        .field label { font-weight: bold; margin-bottom: 6px; }
-        .field input, .field select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        .full { grid-column: 1 / -1; }
-        button { margin-top: 18px; background: #007bff; color: #fff; padding: 11px 18px; border: 0; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; white-space: nowrap; }
-        th { background: #f4f4f9; }
-        .valid { color: #198754; font-weight: bold; }
-        .revoked { color: #dc3545; font-weight: bold; }
-        .expired { color: #b26a00; font-weight: bold; }
-        .empty { color: #777; }
-        @media (max-width: 800px) { .form-grid { grid-template-columns: 1fr; } .full { grid-column: auto; } body { margin: 15px; } }
+        body{font-family:Arial,sans-serif;margin:40px;background:#f4f4f9;color:#222}.container{max-width:1400px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1)}h1{margin-top:0}h2{margin-top:30px}.notice,.success,.error{padding:12px 15px;margin-bottom:20px;border-radius:4px}.notice{background:#e9ecef}.success{background:#d1e7dd;color:#0f5132}.error{background:#f8d7da;color:#842029}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.field{display:flex;flex-direction:column}.field label{font-weight:bold;margin-bottom:6px}.field input,.field select{padding:10px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box}button,.edit-link{display:inline-block;margin-top:18px;background:#007bff;color:#fff;padding:11px 18px;border:0;border-radius:4px;cursor:pointer;text-decoration:none}.edit-link{margin-top:0;padding:7px 11px}button:hover,.edit-link:hover{background:#0056b3}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top;white-space:nowrap}th{background:#f4f4f9}.valid{color:#198754;font-weight:bold}.revoked{color:#dc3545;font-weight:bold}.expired{color:#b26a00;font-weight:bold}.empty{color:#777}@media(max-width:800px){.form-grid{grid-template-columns:1fr}body{margin:15px}}
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>CETI Admin</h1>
-        <div class="notice">Panel administrativo protegido. En esta etapa se permite registrar certificados; edición y eliminación siguen deshabilitadas.</div>
-
-        {% if created %}
-            <div class="success">Certificado registrado correctamente.</div>
-        {% endif %}
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
-
-        <h2>Registrar certificado</h2>
-        <form method="POST" action="{{ url_for('admin') }}">
-            <div class="form-grid">
-                <div class="field">
-                    <label for="folio">Folio *</label>
-                    <input type="text" id="folio" name="folio" required value="{{ request.form.get('folio', '') }}">
-                </div>
-                <div class="field">
-                    <label for="document_type">Tipo de documento</label>
-                    <input type="text" id="document_type" name="document_type" value="{{ request.form.get('document_type', '') }}">
-                </div>
-                <div class="field">
-                    <label for="transcript">Transcript</label>
-                    <input type="text" id="transcript" name="transcript" value="{{ request.form.get('transcript', '') }}">
-                </div>
-                <div class="field">
-                    <label for="certificate">Certificate</label>
-                    <input type="text" id="certificate" name="certificate" value="{{ request.form.get('certificate', '') }}">
-                </div>
-                <div class="field">
-                    <label for="nombre">Nombre *</label>
-                    <input type="text" id="nombre" name="nombre" required value="{{ request.form.get('nombre', '') }}">
-                </div>
-                <div class="field">
-                    <label for="curso">Programa *</label>
-                    <input type="text" id="curso" name="curso" required value="{{ request.form.get('curso', '') }}">
-                </div>
-                <div class="field">
-                    <label for="level">Nivel</label>
-                    <input type="text" id="level" name="level" value="{{ request.form.get('level', '') }}">
-                </div>
-                <div class="field">
-                    <label for="hours">Horas</label>
-                    <input type="number" id="hours" name="hours" min="0" step="1" value="{{ request.form.get('hours', '') }}">
-                </div>
-                <div class="field">
-                    <label for="fecha">Fecha de emisión *</label>
-                    <input type="date" id="fecha" name="fecha" required value="{{ request.form.get('fecha', '') }}">
-                </div>
-                <div class="field">
-                    <label for="estatus">Estado *</label>
-                    <select id="estatus" name="estatus" required>
-                        {% set selected_status = request.form.get('estatus', 'Valido') %}
-                        <option value="Valido" {% if selected_status == 'Valido' %}selected{% endif %}>Válido</option>
-                        <option value="Revocado" {% if selected_status == 'Revocado' %}selected{% endif %}>Revocado</option>
-                        <option value="Expirado" {% if selected_status == 'Expirado' %}selected{% endif %}>Expirado</option>
-                    </select>
-                </div>
-            </div>
-            <button type="submit">Registrar certificado</button>
-        </form>
-
-        <h2>Certificados registrados</h2>
-        {% if certificados %}
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th><th>Folio</th><th>Transcript</th><th>Certificate</th><th>Tipo</th><th>Nombre</th><th>Programa</th><th>Nivel</th><th>Horas</th><th>Fecha</th><th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for certificado in certificados %}
-                            <tr>
-                                <td>{{ certificado.id }}</td>
-                                <td>{{ certificado.folio }}</td>
-                                <td>{{ certificado.transcript or '—' }}</td>
-                                <td>{{ certificado.certificate or '—' }}</td>
-                                <td>{{ certificado.document_type or '—' }}</td>
-                                <td>{{ certificado.nombre }}</td>
-                                <td>{{ certificado.curso }}</td>
-                                <td>{{ certificado.level or '—' }}</td>
-                                <td>{{ certificado.hours if certificado.hours is not none else '—' }}</td>
-                                <td>{{ certificado.fecha }}</td>
-                                <td>
-                                    {% if certificado.estatus == 'Valido' %}<span class="valid">Válido</span>
-                                    {% elif certificado.estatus == 'Revocado' %}<span class="revoked">Revocado</span>
-                                    {% elif certificado.estatus == 'Expirado' %}<span class="expired">Expirado</span>
-                                    {% else %}{{ certificado.estatus }}{% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <p class="empty">No hay certificados registrados.</p>
-        {% endif %}
-    </div>
-</body>
-</html>
+<body><div class="container">
+<h1>CETI Admin</h1>
+<div class="notice">Panel administrativo protegido. Se permite registrar y editar certificados. La eliminación física permanece deshabilitada.</div>
+{% if created %}<div class="success">Certificado registrado correctamente.</div>{% endif %}
+{% if updated %}<div class="success">Certificado actualizado correctamente.</div>{% endif %}
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<h2>Registrar certificado</h2>
+<form method="POST" action="{{ url_for('admin') }}"><div class="form-grid">
+<div class="field"><label>Folio *</label><input type="text" name="folio" required value="{{ request.form.get('folio','') }}"></div>
+<div class="field"><label>Tipo de documento</label><input type="text" name="document_type" value="{{ request.form.get('document_type','') }}"></div>
+<div class="field"><label>Transcript</label><input type="text" name="transcript" value="{{ request.form.get('transcript','') }}"></div>
+<div class="field"><label>Certificate</label><input type="text" name="certificate" value="{{ request.form.get('certificate','') }}"></div>
+<div class="field"><label>Nombre *</label><input type="text" name="nombre" required value="{{ request.form.get('nombre','') }}"></div>
+<div class="field"><label>Programa *</label><input type="text" name="curso" required value="{{ request.form.get('curso','') }}"></div>
+<div class="field"><label>Nivel</label><input type="text" name="level" value="{{ request.form.get('level','') }}"></div>
+<div class="field"><label>Horas</label><input type="number" name="hours" min="0" step="1" value="{{ request.form.get('hours','') }}"></div>
+<div class="field"><label>Fecha de emisión *</label><input type="date" name="fecha" required value="{{ request.form.get('fecha','') }}"></div>
+<div class="field"><label>Estado *</label><select name="estatus" required>{% set s=request.form.get('estatus','Valido') %}<option value="Valido" {% if s=='Valido' %}selected{% endif %}>Válido</option><option value="Revocado" {% if s=='Revocado' %}selected{% endif %}>Revocado</option><option value="Expirado" {% if s=='Expirado' %}selected{% endif %}>Expirado</option></select></div>
+</div><button type="submit">Registrar certificado</button></form>
+<h2>Certificados registrados</h2>
+{% if certificados %}<div class="table-wrap"><table><thead><tr><th>ID</th><th>Folio</th><th>Transcript</th><th>Certificate</th><th>Tipo</th><th>Nombre</th><th>Programa</th><th>Nivel</th><th>Horas</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+{% for c in certificados %}<tr><td>{{ c.id }}</td><td>{{ c.folio }}</td><td>{{ c.transcript or '—' }}</td><td>{{ c.certificate or '—' }}</td><td>{{ c.document_type or '—' }}</td><td>{{ c.nombre }}</td><td>{{ c.curso }}</td><td>{{ c.level or '—' }}</td><td>{{ c.hours if c.hours is not none else '—' }}</td><td>{{ c.fecha }}</td><td>{% if c.estatus=='Valido' %}<span class="valid">Válido</span>{% elif c.estatus=='Revocado' %}<span class="revoked">Revocado</span>{% elif c.estatus=='Expirado' %}<span class="expired">Expirado</span>{% else %}{{ c.estatus }}{% endif %}</td><td><a class="edit-link" href="{{ url_for('admin_edit', certificate_id=c.id) }}">Editar</a></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty">No hay certificados registrados.</p>{% endif %}
+</div></body></html>
