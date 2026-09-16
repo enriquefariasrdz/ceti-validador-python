@@ -30,6 +30,10 @@ def require_admin():
         return admin_auth_required()
     return None
 
+def current_admin_user():
+    auth = request.authorization
+    return auth.username if auth else None
+
 def clean_optional(value):
     value = (value or '').strip()
     return value or None
@@ -77,6 +81,34 @@ def find_identifier_duplicate(cursor, data, exclude_id=None):
     cursor.execute(sql, tuple(params))
     return cursor.fetchone()
 
+def write_audit(cursor, certificate_id, action, admin_user, old_status=None, new_status=None):
+    cursor.execute("""
+        INSERT INTO certificado_auditoria
+        (certificado_id, accion, usuario, estado_anterior, estado_nuevo)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (certificate_id, action, admin_user, old_status, new_status))
+
+def ensure_audit_table():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS certificado_auditoria (
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    certificado_id INT NOT NULL,
+                    accion VARCHAR(30) NOT NULL,
+                    usuario VARCHAR(100) NOT NULL,
+                    estado_anterior VARCHAR(20) NULL,
+                    estado_nuevo VARCHAR(20) NULL,
+                    fecha_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_certificado_id (certificado_id),
+                    INDEX idx_fecha_hora (fecha_hora)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            connection.commit()
+    finally:
+        connection.close()
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     resultado = None
@@ -100,6 +132,7 @@ def admin():
         return auth_error
 
     error = None
+    admin_user = current_admin_user()
     if request.method == 'POST':
         data, error = parse_certificate_form()
         if error is None:
@@ -114,6 +147,8 @@ def admin():
                             (folio, transcript, certificate, document_type, nombre, curso, level, hours, fecha, estatus)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """, (data['folio'], data['transcript'], data['certificate'], data['document_type'], data['nombre'], data['curso'], data['level'], data['hours'], data['fecha'], data['estatus']))
+                        certificate_id = cursor.lastrowid
+                        write_audit(cursor, certificate_id, 'CREADO', admin_user, None, data['estatus'])
                         connection.commit()
                         return redirect(url_for('admin', created='1'))
             except pymysql.MySQLError:
@@ -140,7 +175,6 @@ def admin():
             if status_filter:
                 conditions.append('estatus = %s')
                 params.append(status_filter)
-
             where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
             cursor.execute(f"""
                 SELECT id, folio, transcript, certificate, document_type, nombre, curso, level, hours, fecha, estatus
@@ -151,15 +185,7 @@ def admin():
     finally:
         connection.close()
 
-    return render_template(
-        'admin.html',
-        certificados=certificados,
-        error=error,
-        created=request.args.get('created') == '1',
-        updated=request.args.get('updated') == '1',
-        search=search,
-        status_filter=status_filter
-    )
+    return render_template('admin.html', certificados=certificados, error=error, created=request.args.get('created') == '1', updated=request.args.get('updated') == '1', search=search, status_filter=status_filter)
 
 @app.route('/admin/edit/<int:certificate_id>', methods=['GET', 'POST'])
 def admin_edit(certificate_id):
@@ -169,6 +195,7 @@ def admin_edit(certificate_id):
 
     connection = get_db_connection()
     error = None
+    admin_user = current_admin_user()
     try:
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -180,6 +207,7 @@ def admin_edit(certificate_id):
                 return 'Certificado no encontrado', 404
 
             if request.method == 'POST':
+                old_status = certificado['estatus']
                 data, error = parse_certificate_form()
                 if error is None:
                     if find_identifier_duplicate(cursor, data, exclude_id=certificate_id):
@@ -191,6 +219,7 @@ def admin_edit(certificate_id):
                                 nombre=%s, curso=%s, level=%s, hours=%s, fecha=%s, estatus=%s
                             WHERE id=%s
                         """, (data['folio'], data['transcript'], data['certificate'], data['document_type'], data['nombre'], data['curso'], data['level'], data['hours'], data['fecha'], data['estatus'], certificate_id))
+                        write_audit(cursor, certificate_id, 'EDITADO', admin_user, old_status, data['estatus'])
                         connection.commit()
                         return redirect(url_for('admin', updated='1'))
                 certificado = {**certificado, **(data or {})}
@@ -201,6 +230,8 @@ def admin_edit(certificate_id):
         connection.close()
 
     return render_template('admin_edit.html', certificado=certificado, error=error)
+
+ensure_audit_table()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
