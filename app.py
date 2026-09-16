@@ -33,5 +33,9 @@ def index():
         connection.close()
     return render_template('index.html', resultado=resultado)
 
+@app.route('/admin', methods=['GET'])
+def admin():
+    return 'CETI Admin - acceso administrativo en preparación', 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
