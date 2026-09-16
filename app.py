@@ -2,11 +2,44 @@ from flask import Flask, render_template, request, Response, redirect, url_for
 import pymysql
 import os
 import secrets
+import json
+import urllib.request
 
 app = Flask(__name__)
 
+def get_vault_db_credentials():
+    vault_addr = os.environ['VAULT_ADDR'].rstrip('/')
+    payload = json.dumps({
+        'role_id': os.environ['VAULT_ROLE_ID'],
+        'secret_id': os.environ['VAULT_SECRET_ID'],
+    }).encode()
+
+    login_request = urllib.request.Request(
+        vault_addr + '/v1/auth/approle/login',
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(login_request, timeout=5) as response:
+        token = json.load(response)['auth']['client_token']
+
+    secret_request = urllib.request.Request(
+        vault_addr + '/v1/secret/data/ceti-validador',
+        headers={'X-Vault-Token': token},
+    )
+    with urllib.request.urlopen(secret_request, timeout=5) as response:
+        credentials = json.load(response)['data']['data']
+
+    required = ('db_host', 'db_user', 'db_password')
+    missing = [key for key in required if not credentials.get(key)]
+    if missing:
+        raise RuntimeError('Vault secret ceti-validador is missing required database fields')
+
+    return credentials
+
 def get_db_connection():
-    return pymysql.connect(host=os.getenv('DB_HOST','localhost'), user=os.getenv('DB_USER','root'), password=os.getenv('DB_PASSWORD',''), database=os.getenv('DB_NAME','test'), cursorclass=pymysql.cursors.DictCursor)
+    credentials = get_vault_db_credentials()
+    return pymysql.connect(host=credentials['db_host'], user=credentials['db_user'], password=credentials['db_password'], database=os.getenv('DB_NAME','test'), cursorclass=pymysql.cursors.DictCursor)
 
 def admin_credentials_valid(username,password):
     admin_user=os.getenv('ADMIN_USER'); admin_password=os.getenv('ADMIN_PASSWORD')
