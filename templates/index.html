@@ -36,8 +36,30 @@
                         <h3 class="warning">Estado del certificado: {{ resultado.estatus }}</h3>
                     {% endif %}
                     <p><strong>Nombre:</strong> {{ resultado.nombre }}</p>
-                    <p><strong>Curso:</strong> {{ resultado.curso }}</p>
-                    <p><strong>Fecha:</strong> {{ resultado.fecha }}</p>
+                    <p><strong>Programa:</strong> {{ resultado.curso }}</p>
+                    {% if resultado.level %}
+                        <p><strong>Nivel:</strong> {{ resultado.level }}</p>
+                    {% endif %}
+                    {% if resultado.hours %}
+                        <p><strong>Horas:</strong> {{ resultado.hours }}</p>
+                    {% endif %}
+                    <p><strong>Fecha de emisión:</strong> {{ resultado.fecha }}</p>
+                    {% if resultado.transcript %}
+                        <p><strong>Transcript:</strong> {{ resultado.transcript }}</p>
+                    {% endif %}
+                    {% if resultado.certificate %}
+                        <p><strong>Certificate:</strong> {{ resultado.certificate }}</p>
+                    {% endif %}
+                    {% if resultado.document_type %}
+                        <p><strong>Tipo de documento:</strong> {{ resultado.document_type }}</p>
+                    {% endif %}
+                    <p><strong>Estado:</strong>
+                        {% if resultado.estatus == 'Valido' %}
+                            Válido
+                        {% else %}
+                            {{ resultado.estatus }}
+                        {% endif %}
+                    </p>
                 {% else %}
                     <h3 class="invalid">Certificado no encontrado</h3>
                     <p>El folio ingresado no existe en nuestros registros.</p>
