@@ -183,5 +183,4 @@ def admin_edit(certificate_id):
     finally: connection.close()
     return render_template('admin_edit.html',certificado=certificado,error=error)
 
-ensure_audit_table()
 if __name__=='__main__': app.run(host='0.0.0.0',port=5000)
