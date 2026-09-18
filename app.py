@@ -49,7 +49,7 @@ def get_vault_db_credentials():
     token = get_vault_token()
 
     secret_request = urllib.request.Request(
-        vault_addr + '/v1/secret/data/ceti-validador',
+        vault_addr + '/v1/ceti/data/ceti-validador',
         headers={'X-Vault-Token': token},
     )
     with urllib.request.urlopen(secret_request, timeout=5) as response:
