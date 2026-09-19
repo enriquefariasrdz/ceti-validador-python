@@ -30,20 +30,21 @@ Examples of secrets that belong in Vault:
 CETI Infrastructure
 ```
 
-Confirmed recovery item:
+Confirmed recovery items:
 
 ```text
 CETI Infrastructure
-└── HashiCorp Vault Unseal Keys
+├── HashiCorp Vault Unseal Keys
+└── CETI rclone Google Drive Configuration
 ```
 
-The HashiCorp Vault unseal material was transferred directly from the Hetzner server to 1Password using SSH + the 1Password CLI. The secret values were not committed to Git or pasted into project documentation.
+The HashiCorp Vault unseal material and the live rclone configuration were transferred directly from the Hetzner server to 1Password using SSH + the 1Password CLI. Their secret values were not committed to Git or pasted into project documentation.
 
 1Password should also be used for human recovery/administration information such as:
 
 - HashiCorp Vault recovery/bootstrap material
 - Coolify administration/API recovery credentials
-- Google Drive/rclone OAuth recovery information when appropriate
+- Google Drive/rclone OAuth recovery information
 - SSH keys and server access credentials
 - GitHub/deployment recovery credentials when appropriate
 
@@ -131,6 +132,7 @@ Useful safe checks:
 op --version
 op vault list
 op item get "HashiCorp Vault Unseal Keys" --vault "CETI Infrastructure" --format json
+op item get "CETI rclone Google Drive Configuration" --vault "CETI Infrastructure" --format json
 ```
 
 Do not print secret fields into shell history, logs, chat, or GitHub.
@@ -149,13 +151,41 @@ and destination:
 CETI-Backups/Database/
 ```
 
-The rclone configuration contains OAuth credentials/tokens and must not be committed. Determine its active location with:
+The active server-side rclone configuration is:
 
-```bash
-rclone config file
+```text
+/root/.config/rclone/rclone.conf
 ```
 
-See `docs/BACKUPS.md` for backup reconstruction and verification.
+It contains OAuth credentials/tokens and must not be committed.
+
+An encrypted off-server recovery copy of the live configuration exists in 1Password:
+
+```text
+Vault: CETI Infrastructure
+Item:  CETI rclone Google Drive Configuration
+```
+
+### Recover rclone on a replacement server
+
+1. Install rclone.
+2. Restore the protected configuration from the 1Password recovery item to the root user's rclone configuration location, or recreate the remote interactively if credentials are intentionally being rotated.
+3. Restrict permissions on the restored configuration.
+4. Verify that the remote is recognized:
+
+```bash
+rclone listremotes
+```
+
+5. Verify access to the CETI backup directory:
+
+```bash
+rclone ls ceti-google-drive:CETI-Backups/Database/
+```
+
+6. Run `/root/ceti-backups/backup-db.sh` manually and require both local and Google Drive verification to succeed before relying on cron.
+
+See `docs/BACKUPS.md` for the full backup reconstruction and verification procedure.
 
 ## Coolify
 
