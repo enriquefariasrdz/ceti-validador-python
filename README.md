@@ -47,13 +47,16 @@ The currently tested setup includes:
 - MariaDB stores certificate information.
 - HashiCorp Vault provides database credentials to the application.
 - Vault automatically unseals after a Hetzner reboot using a systemd service and local unseal script.
+- Vault unseal recovery material has an off-server copy in 1Password under `CETI Infrastructure` → `HashiCorp Vault Unseal Keys`.
+- The administrator MacBook uses the 1Password SSH agent for CETI server SSH access.
 - Ubuntu nginx is disabled because Coolify/Traefik owns ports 80 and 443.
 - Full server reboot was tested successfully after fixing the nginx/Traefik port conflict.
 - Daily verified MariaDB backups are stored locally and copied off-server to Google Drive using rclone.
 
-## Backups
+## Operations documentation
 
-See [`docs/BACKUPS.md`](docs/BACKUPS.md) for the complete backup and rclone configuration, verification procedure, cron schedule, and reconstruction instructions.
+- [`docs/BACKUPS.md`](docs/BACKUPS.md) — database backups, rclone/Google Drive configuration, cron schedule, verification and reconstruction.
+- [`docs/SECRETS-AND-RECOVERY.md`](docs/SECRETS-AND-RECOVERY.md) — Vault vs 1Password responsibilities, recovery locations, secret-handling policy and reconstruction guidance.
 
 Important: PDFs are **not** intended to be preserved or archived as part of the current CETI design. The goal is to keep the validator lightweight and present certificate information attractively from structured database records.
 
@@ -70,7 +73,9 @@ These files live on the Hetzner server and are intentionally documented here rat
 
 ## Secrets policy
 
-Do not commit live credentials to this repository. In particular, never commit:
+Do not commit live credentials to this repository. Runtime secrets belong in HashiCorp Vault; human recovery and administration material belongs in the dedicated 1Password `CETI Infrastructure` vault. GitHub contains documentation and code only.
+
+In particular, never commit:
 
 - Vault unseal keys
 - Vault AppRole credentials
@@ -78,6 +83,8 @@ Do not commit live credentials to this repository. In particular, never commit:
 - Coolify API tokens
 - rclone OAuth access or refresh tokens
 - Google OAuth secrets
+- SSH private keys
+- 1Password credentials/tokens
 - application administrator passwords
 - `.env` files containing credentials
 
@@ -85,4 +92,4 @@ Documentation should contain the names, locations, architecture, commands, and r
 
 ## Documentation rule
 
-Infrastructure changes are part of the project. When the deployment architecture, Vault setup, database configuration, backup process, DNS/domain configuration, or operational procedure changes, update the corresponding documentation in this repository as part of the same work.
+Infrastructure changes are part of the project. When the deployment architecture, Vault setup, database configuration, backup process, DNS/domain configuration, secrets/recovery architecture, or operational procedure changes, update the corresponding documentation in this repository as part of the same work.
