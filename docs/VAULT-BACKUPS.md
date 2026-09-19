@@ -14,7 +14,7 @@ Storage backend: `file`
 
 Container data path: `/vault/file`
 
-Persistent Docker volume on the Hetzner host:
+Persistent Docker volume:
 
 ```text
 /var/lib/docker/volumes/mh5tyoqpbcpcv1usplkjmamg_vault-data/_data
@@ -22,53 +22,146 @@ Persistent Docker volume on the Hetzner host:
 
 The production volume was approximately 528 KB when the backup procedure was established.
 
+## Critical operational rule: Docker health is not Vault readiness
+
+On 2026-09-19 an application-level certificate lookup returned HTTP 500 even though the production Vault Docker container reported `running` and `healthy` and the validator homepage returned HTTP 200.
+
+Application logs showed the failure occurred during AppRole login, where Vault returned HTTP 503. Direct inspection of `/v1/sys/health` established the real state:
+
+```text
+initialized: true
+sealed: true
+```
+
+The cause was the original backup procedure: it stopped Vault to obtain a consistent file-backend backup and restarted the container afterward, but treated Docker `healthy` as sufficient. A Shamir-sealed Vault restarts in a sealed state, so Docker container health alone did not prove that AppRole or secret access was operational.
+
+The production Vault was unsealed using protected recovery material. Afterward it reported:
+
+```text
+Initialized: True
+Sealed: False
+Standby: False
+```
+
+Certificate lookup for the known validation record succeeded again.
+
+Operational rule: **never use Docker health alone as the readiness test for CETI Vault.** A successful production check must confirm `initialized=true` and `sealed=false` through the Vault API. Application-level certificate validation should also be tested after maintenance that restarts Vault.
+
+## Corrected production backup procedure
+
+`/root/ceti-backups/backup-vault.sh` was corrected after the incident. The current procedure:
+
+1. Confirms the production Vault container and data directory exist.
+2. Confirms protected unseal material is readable.
+3. Refuses to begin if production Vault is already sealed or unavailable.
+4. Stops Vault for a consistent backup of the `file` storage backend.
+5. Creates a gzip tar archive with numeric ownership preserved.
+6. Restarts the production Vault container.
+7. Waits for the Vault API itself, rather than relying only on Docker health.
+8. Detects the expected sealed state after restart.
+9. Supplies protected unseal shares without printing their values.
+10. Verifies `initialized=true` and `sealed=false` before proceeding.
+11. Verifies gzip integrity.
+12. Verifies that `./core/` and `./logical/` exist in the archive.
+13. Finalizes the local archive with mode `600`.
+14. Uploads it to Google Drive.
+15. Runs `rclone check --one-way` against the remote copy.
+16. Performs another final Vault API check requiring `sealed=false`.
+17. Removes generated local production Vault archives older than 30 days.
+18. Reports `CETI VAULT BACKUP COMPLETE` only after all required checks succeed.
+
+The script also contains emergency recovery handling so an interruption while Vault is stopped attempts to start and unseal Vault rather than merely restarting the container.
+
+## Verified corrected backup test — 2026-09-19
+
+Before another production restart, the corrected archive-validation logic was tested independently against a temporary archive. It passed:
+
+```text
+GZIP VERIFIED
+CORE DATA VERIFIED
+LOGICAL DATA VERIFIED
+ARCHIVE VALIDATION TEST PASSED
+```
+
+Production Vault remained initialized, unsealed, and active throughout that validation-only test.
+
+The complete corrected backup procedure was then run against production. It successfully restarted and automatically unsealed Vault, produced the following new backup:
+
+```text
+/root/ceti-backups/ceti-vault-2026-09-19_05-29-23.tar.gz
+```
+
+The archive was approximately 39 KB locally (39,719 bytes remotely) and was uploaded to:
+
+```text
+ceti-google-drive:CETI-Backups/Vault/
+```
+
+Post-backup verification confirmed:
+
+```text
+Initialized: True
+Sealed: False
+Standby: False
+Version: 2.1.1
+Docker Status: running
+Docker Health: healthy
+Validator homepage: HTTP 200
+```
+
+Most importantly, an application-level lookup of `CETI-TR-2026-G2401` succeeded after the backup. This exercises the production application path through Vault/AppRole and MariaDB rather than relying only on the homepage health response.
+
+The corrected backup procedure is therefore operationally verified end-to-end.
+
 ## Legacy Vault retirement state
 
-An older Vault instance also existed:
+An older Vault instance exists:
 
 ```text
 vault-r4ukak9jk6z6tfms22amldjs
 ```
 
-Investigation on 2026-09-19 established that no other running container referenced this legacy Vault hostname. The current CETI validator uses the newer production Vault listed above.
-
-The legacy Vault had its own independent file-storage volume:
+Investigation established that the current CETI validator points to the newer production Vault. The legacy Vault had its own independent file-storage volume:
 
 ```text
 /var/lib/docker/volumes/r4ukak9jk6z6tfms22amldjs_vault-data/_data
 ```
 
-Its data volume was approximately 436 KB.
-
-Before retirement, the legacy Vault was stopped cleanly and a final archive was created:
+Its data volume was approximately 436 KB. Before retirement it was stopped cleanly and a final archive was created:
 
 ```text
 /root/ceti-backups/ceti-vault-legacy-r4ukak9-2026-09-19.tar.gz
 ```
 
-The archive was approximately 24 KB compressed, passed `gzip -t`, and contained Vault `core/` data. It was uploaded to the separate Google Drive archival location:
+The archive was approximately 24 KB compressed, passed `gzip -t`, contained Vault `core/` data, and was uploaded to:
 
 ```text
 ceti-google-drive:CETI-Backups/Vault-Legacy/
 ```
 
-Remote verification with `rclone check --one-way` reported zero differences and one matching file. The legacy Vault was intentionally left stopped (`Status=exited`) rather than deleted. Its container and Docker volume should remain intact during an observation period and must not be removed until production operation has been reconfirmed and retirement is explicitly approved.
+`rclone check --one-way` reported zero differences and one matching file. The legacy Vault remains intentionally stopped rather than deleted. Its container and Docker volume should remain intact during an observation period until retirement is explicitly approved.
 
-## Why the production backup briefly stops Vault
-
-The production Vault uses the `file` storage backend rather than integrated Raft storage. Therefore `vault operator raft snapshot` is not the applicable backup mechanism.
-
-For a consistent filesystem archive, the backup procedure briefly stops the production Vault container, archives the persistent file-storage volume, explicitly starts Vault again, waits for the container health check to return healthy, verifies the archive, uploads it to Google Drive, and verifies the remote copy.
-
-The container restart policy is `unless-stopped`, so the backup script explicitly restarts Vault after the archive step. The script also includes an EXIT cleanup trap that attempts an emergency restart if execution is interrupted while Vault is stopped.
+The 2026-09-19 sealed-state incident was confirmed to involve the newer production Vault, not a dependency on the legacy Vault.
 
 ## Backup locations
 
-Local backup directory: `/root/ceti-backups`
+Local backup directory:
 
-Backup script: `/root/ceti-backups/backup-vault.sh`
+```text
+/root/ceti-backups
+```
 
-Backup log: `/root/ceti-backups/vault-backup.log`
+Production backup script:
+
+```text
+/root/ceti-backups/backup-vault.sh
+```
+
+Backup log:
+
+```text
+/root/ceti-backups/vault-backup.log
+```
 
 Production Google Drive destination:
 
@@ -82,13 +175,13 @@ Legacy archival destination:
 ceti-google-drive:CETI-Backups/Vault-Legacy/
 ```
 
-Local generated archive naming convention:
+Production archive naming convention:
 
 ```text
 ceti-vault-YYYY-MM-DD_HH-MM-SS.tar.gz
 ```
 
-Local generated production Vault backups older than 30 days are removed by the backup script after a successful backup cycle.
+Local generated production Vault backups older than 30 days are removed after a successful backup cycle.
 
 ## Schedule
 
@@ -103,27 +196,6 @@ MariaDB backups run daily at 03:00:
 ```cron
 0 3 * * * /root/ceti-backups/backup-db.sh >> /root/ceti-backups/backup.log 2>&1
 ```
-
-## Verified backup flow
-
-1. Confirm the production Vault container exists.
-2. Confirm the production Vault data directory exists.
-3. Stop the production Vault container.
-4. Create a gzip-compressed tar archive of the persistent Vault data with numeric ownership preserved.
-5. Explicitly restart Vault.
-6. Wait for Docker health status to become `healthy`.
-7. Run `gzip -t` against the local archive.
-8. Confirm the archive contains Vault `core/` and `logical/` data.
-9. Move the verified temporary archive into its final local filename and restrict it to mode `600`.
-10. Upload the archive to `CETI-Backups/Vault/` in Google Drive.
-11. Run `rclone check --one-way` to compare the local archive with the remote copy.
-12. Delete generated local production Vault backups older than 30 days.
-
-## First verified automated-backup test
-
-The backup script was manually tested before being added to cron. The test successfully stopped production Vault, created the archive, restarted Vault, returned Vault to healthy status, verified the local archive, uploaded it to Google Drive, and completed `rclone check` with zero differences and one matching file.
-
-The first generated automated archive was approximately 40 KB compressed.
 
 ## Verified disaster-recovery drill — 2026-09-19
 
@@ -145,13 +217,13 @@ An isolated test Vault was started against the restored data and bound only to l
 
 ### Phase 3 — recovery-key validation
 
-The existing protected unseal material was supplied directly from the server-side recovery file without printing key values. The restored Vault successfully became unsealed. Its logs confirmed successful post-unseal setup and restoration of the CETI KV secret engine and AppRole authentication backend.
+Existing protected unseal material was supplied directly from the server-side recovery file without printing key values. The restored Vault successfully became unsealed. Its logs confirmed successful post-unseal setup and restoration of the CETI KV secret engine and AppRole authentication backend.
 
 ### Phase 4 — application authentication and secret-access validation
 
 Historical AppRole files on the server did not match the credentials currently deployed to the CETI application. This was identified without printing either credential. Current production AppRole credentials were separately protected in 1Password under `CETI Infrastructure`.
 
-Using the current credentials directly from the running CETI application container, the isolated restored Vault successfully authenticated through AppRole:
+Using current credentials directly from the running CETI application container, the isolated restored Vault successfully authenticated through AppRole:
 
 ```text
 APPROLE LOGIN: OK
@@ -171,7 +243,7 @@ Secret fields present: 3
 Secret values displayed: NO
 ```
 
-This verifies the complete recovery chain:
+This verifies:
 
 ```text
 verified backup
@@ -182,11 +254,11 @@ verified backup
     -> application secret path accessible
 ```
 
-The temporary restore container and restore directory were removed after testing. Production Vault was reconfirmed as `running` and `healthy` afterward.
+The temporary restore environment was removed after testing and production Vault remained healthy.
 
 ## Earlier recovery archives
 
-Three earlier Vault recovery archives were copied to the production Google Drive Vault backup directory and verified together with `rclone check`:
+Three earlier recovery archives were copied to the production Google Drive Vault backup directory and verified with `rclone check`:
 
 ```text
 vault-current-sealed-20260916-112857.tar.gz
@@ -194,7 +266,7 @@ vault-data-backup-20260916-100009.tar.gz
 vault-recovery-verified-20260916-114849.tar.gz
 ```
 
-Verification reported zero differences and three matching files. Their local server permissions were tightened from mode `644` to `600`.
+Verification reported zero differences and three matching files. Local server permissions were tightened to mode `600`.
 
 ## Secret recovery layers
 
@@ -220,7 +292,15 @@ Review the scheduled backup log:
 tail -100 /root/ceti-backups/vault-backup.log
 ```
 
-List generated local production Vault backups:
+Check the real Vault state:
+
+```bash
+docker exec vault-mh5tyoqpbcpcv1usplkjmamg wget -qO- http://127.0.0.1:8200/v1/sys/health
+```
+
+A production-ready state requires at least `initialized=true` and `sealed=false`.
+
+List local production Vault backups:
 
 ```bash
 ls -lh /root/ceti-backups/ceti-vault-*.tar.gz
@@ -238,17 +318,13 @@ List the archived legacy Vault backup:
 rclone lsl ceti-google-drive:CETI-Backups/Vault-Legacy/
 ```
 
-Confirm production Vault health:
-
-```bash
-docker inspect vault-mh5tyoqpbcpcv1usplkjmamg --format 'Status={{.State.Status}} Health={{.State.Health.Status}}'
-```
-
 Confirm the legacy Vault remains stopped during its observation period:
 
 ```bash
 docker inspect vault-r4ukak9jk6z6tfms22amldjs --format 'Status={{.State.Status}}'
 ```
+
+After Vault maintenance or backup testing, verify a real certificate lookup such as `CETI-TR-2026-G2401`; a homepage HTTP 200 alone is not a sufficient application health check.
 
 ## Restore procedure summary
 
@@ -264,6 +340,6 @@ Do not overwrite a running Vault data directory. A production restore must be tr
 8. Confirm Vault becomes unsealed and completes post-unseal setup.
 9. Authenticate using current application AppRole credentials from the protected recovery source.
 10. Verify access to `ceti/data/ceti-validador` without printing secret values.
-11. Verify the CETI application can authenticate and operate normally before returning the service to production.
+11. Verify a real certificate lookup before returning the service to normal operation.
 
-The 2026-09-19 isolated restore drill successfully validated this recovery chain through application secret access.
+The 2026-09-19 restore drill and subsequent corrected production backup test validated both recovery and normal post-backup operation.
