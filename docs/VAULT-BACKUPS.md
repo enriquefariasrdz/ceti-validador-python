@@ -1,6 +1,6 @@
 # CETI Vault Backups
 
-This document records the verified backup design for the production HashiCorp Vault used by the CETI certificate validator. No secret values are stored here.
+This document records the verified backup and disaster-recovery design for the production HashiCorp Vault used by the CETI certificate validator. No secret values are stored here.
 
 ## Production Vault
 
@@ -10,11 +10,7 @@ The CETI validator is configured to use the production Vault container:
 vault-mh5tyoqpbcpcv1usplkjmamg
 ```
 
-Vault storage backend:
-
-```text
-file
-```
+Vault storage backend: `file`.
 
 Vault data path inside the container:
 
@@ -42,23 +38,11 @@ The container restart policy is `unless-stopped`, so the backup script explicitl
 
 ## Backup locations
 
-Local backup directory:
+Local backup directory: `/root/ceti-backups`
 
-```text
-/root/ceti-backups
-```
+Backup script: `/root/ceti-backups/backup-vault.sh`
 
-Backup script:
-
-```text
-/root/ceti-backups/backup-vault.sh
-```
-
-Backup log:
-
-```text
-/root/ceti-backups/vault-backup.log
-```
+Backup log: `/root/ceti-backups/vault-backup.log`
 
 Google Drive destination through rclone:
 
@@ -107,17 +91,91 @@ The Vault backup performs the following sequence:
 
 ## First verified automated-backup test
 
-The backup script was manually tested before being added to cron. The test successfully:
-
-- stopped production Vault;
-- created the archive;
-- restarted Vault;
-- returned Vault to healthy status;
-- verified the local archive;
-- uploaded the archive to Google Drive; and
-- completed `rclone check` with zero differences and one matching file.
+The backup script was manually tested before being added to cron. The test successfully stopped production Vault, created the archive, restarted Vault, returned Vault to healthy status, verified the local archive, uploaded it to Google Drive, and completed `rclone check` with zero differences and one matching file.
 
 The first generated automated archive was approximately 40 KB compressed.
+
+## Verified disaster-recovery drill — 2026-09-19
+
+A complete non-production restore drill was performed using:
+
+```text
+/root/ceti-backups/ceti-vault-2026-09-19_04-55-50.tar.gz
+```
+
+Production Vault and its Docker volume were not modified during the drill.
+
+### Phase 1 — archive restoration
+
+The archive passed `gzip -t`, was extracted into an isolated restore directory, and restored approximately 528 KB of Vault data. The restored filesystem contained the expected critical structures:
+
+```text
+core/
+logical/
+sys/
+auth/
+```
+
+### Phase 2 — isolated Vault boot
+
+An isolated test Vault was started against the restored data and bound only to localhost on port `18200`. It reported:
+
+```text
+initialized: true
+sealed: true
+```
+
+This demonstrated that the filesystem backup could boot as the previously initialized Vault rather than as a new/empty Vault.
+
+### Phase 3 — recovery-key validation
+
+The existing protected unseal material was supplied directly from the server-side recovery file without printing the key values. The restored Vault successfully transitioned to:
+
+```text
+Initialized: True
+Sealed: False
+```
+
+The restored Vault logs confirmed successful post-unseal setup and restoration of the CETI KV secret engine and AppRole authentication backend.
+
+### Phase 4 — application authentication and secret-access validation
+
+The original historical AppRole files on the server did not match the credentials currently deployed to the CETI application. This was identified without printing either credential. The current production AppRole Role ID and Secret ID were therefore separately protected in 1Password under the `CETI Infrastructure` vault.
+
+Using the current credentials directly from the running CETI application container, the isolated restored Vault successfully authenticated through AppRole:
+
+```text
+APPROLE LOGIN: OK
+```
+
+The authenticated test then accessed the expected application secret path:
+
+```text
+ceti/data/ceti-validador
+```
+
+The response contained three secret fields. Their names/values were not printed during the test.
+
+Result:
+
+```text
+CETI SECRET PATH: ACCESSIBLE
+Secret fields present: 3
+Secret values displayed: NO
+```
+
+This verifies the recovery chain:
+
+```text
+verified backup
+    -> isolated extraction
+    -> restored Vault boot
+    -> existing unseal material
+    -> current CETI AppRole authentication
+    -> application secret path accessible
+```
+
+The Vault disaster-recovery backup is therefore functionally restore-tested, not merely archive-tested.
 
 ## Earlier recovery archives
 
@@ -135,7 +193,9 @@ Verification reported zero differences and three matching files. Their local ser
 
 Vault data archives are stored off-server in Google Drive. Human recovery/bootstrap material is separately protected in the dedicated 1Password vault named `CETI Infrastructure`.
 
-Examples of protected recovery items include the Vault unseal material and AppRole recovery information. Secret values must never be committed to GitHub.
+The current application AppRole credentials have dedicated recovery copies in 1Password. Older AppRole recovery artifacts must be treated as historical/stale unless independently verified against the current deployment.
+
+Secret values must never be committed to GitHub.
 
 See `docs/SECRETS-AND-RECOVERY.md` for the secrets architecture and `docs/BACKUPS.md` for MariaDB/rclone backup details.
 
@@ -171,8 +231,20 @@ Confirm production Vault container health:
 docker inspect vault-mh5tyoqpbcpcv1usplkjmamg --format '{{.State.Health.Status}}'
 ```
 
-## Restore caution
+## Restore procedure summary
 
-Do not overwrite a running Vault data directory. A restore should be treated as a controlled disaster-recovery operation: stop the target Vault, preserve the current data directory before replacement, restore the selected archive while preserving ownership/permissions, start Vault, unseal it if necessary, and verify application authentication and secret access before returning the service to production.
+Do not overwrite a running Vault data directory. A production restore must be treated as a controlled disaster-recovery operation:
 
-A full restore drill should be performed separately on a non-production/test Vault before treating the recovery procedure as fully proven.
+1. Select and locally verify the intended Vault archive.
+2. Stop the target/replacement Vault before modifying its data directory.
+3. Preserve any existing target data before replacement.
+4. Extract the archive while preserving numeric ownership and permissions.
+5. Start Vault using the same `file` storage configuration.
+6. Confirm it reports initialized and sealed.
+7. Supply the protected unseal material without exposing it in logs/history.
+8. Confirm Vault becomes unsealed and completes post-unseal setup.
+9. Authenticate using the current application AppRole credentials from the protected recovery source.
+10. Verify access to `ceti/data/ceti-validador` without printing secret values.
+11. Verify the CETI application can authenticate and operate normally before returning the service to production.
+
+The 2026-09-19 isolated restore drill successfully validated this recovery chain through application secret access.
